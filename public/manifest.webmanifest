@@ -1,0 +1,12 @@
+{
+  "name": "AgriConnect",
+  "short_name": "AgriConnect",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1a10",
+  "theme_color": "#0b1a10",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

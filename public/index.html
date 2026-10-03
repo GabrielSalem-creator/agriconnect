@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b1a10">
+  <title>AgriConnect</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <video id="cam" autoplay playsinline muted></video>
+
+  <header id="top">
+    <button id="langBtn" class="round" aria-label="Language">🌐</button>
+    <div id="hint" hidden><span>📷</span><b id="hintText" dir="auto"></b></div>
+    <div id="side">
+      <button id="planBtn" class="round" aria-label="Plan">📅<i id="badge" hidden></i></button>
+      <a id="recordBtn" class="round" aria-label="Farm record" target="_blank" rel="noopener" hidden>💰</a>
+    </div>
+  </header>
+
+  <footer id="bottom">
+    <div id="caption">
+      <p id="you" dir="auto"></p>
+      <p id="ai" dir="auto"></p>
+    </div>
+    <div id="controls">
+      <button id="keyBtn" class="round small" aria-label="Type">⌨️</button>
+      <div id="orb" class="idle" aria-hidden="true"><span></span></div>
+      <button id="stopBtn" class="round small" aria-label="Stop speaking">✋</button>
+    </div>
+    <form id="typeForm" hidden>
+      <input id="typeInput" type="text" autocomplete="off" enterkeyhint="send" dir="auto">
+      <button class="round small" aria-label="Send">➤</button>
+    </form>
+  </footer>
+
+  <section id="start">
+    <div class="logo">🌱</div>
+    <h1>AgriConnect</h1>
+    <select id="lang" aria-label="Language"></select>
+    <button id="go" aria-label="Start">🎤</button>
+    <p id="startNote"></p>
+  </section>
+
+  <aside id="plan" hidden>
+    <div class="sheet">
+      <div class="sheetHead">
+        <p id="planSummary" dir="auto"></p>
+        <button id="planClose" class="round small" aria-label="Close">✕</button>
+      </div>
+      <ol id="steps"></ol>
+      <a id="calBtn" class="cal" href="#">📅 ➕</a>
+    </div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
