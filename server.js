@@ -911,6 +911,7 @@ http
       else res.end();
     }
   })
-  .listen(PORT, () => {
+  // Bind every interface so the host's proxy can reach the app inside its container.
+  .listen(PORT, "0.0.0.0", () => {
     console.log(`AgriConnect running on http://localhost:${PORT}  (model ${MODEL}, effort ${EFFORT}, data in ${DATA})`);
   });
