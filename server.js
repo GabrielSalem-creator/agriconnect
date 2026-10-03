@@ -1,5 +1,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
@@ -14,7 +16,19 @@ try {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, "public");
-const DATA = process.env.AGRI_DATA_DIR || path.join(here, "data");
+// Some hosts make the app folder read-only, so use the first folder that can actually be written to.
+function pickDataDir() {
+  for (const dir of [process.env.AGRI_DATA_DIR, path.join(here, "data"), path.join(os.tmpdir(), "agriconnect-data")]) {
+    if (!dir) continue;
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "_writable"), "");
+      return dir;
+    } catch {}
+  }
+  throw new Error("No writable folder for data. Set AGRI_DATA_DIR to one.");
+}
+const DATA = pickDataDir();
 
 const PORT = Number(process.env.PORT || 3000);
 const MODEL = process.env.AGRI_MODEL || "claude-opus-5-5";
@@ -898,5 +912,5 @@ http
     }
   })
   .listen(PORT, () => {
-    console.log(`AgriConnect running on http://localhost:${PORT}  (model ${MODEL}, effort ${EFFORT})`);
+    console.log(`AgriConnect running on http://localhost:${PORT}  (model ${MODEL}, effort ${EFFORT}, data in ${DATA})`);
   });
