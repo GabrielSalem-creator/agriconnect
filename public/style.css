@@ -242,3 +242,90 @@ a.round[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
 }
+
+/* ---------- guided survey and offline help ---------- */
+.badge, .status {
+  position: absolute;
+  top: -2px; right: -2px;
+  min-width: 22px; height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: #ff5252;
+  font: 700 13px/22px system-ui, sans-serif;
+  font-style: normal;
+}
+.status { top: auto; bottom: -2px; background: var(--glass); font-size: 12px; }
+.badge[hidden], .status[hidden], #bottom[hidden] { display: none; }
+
+#cam.flash { filter: brightness(2.2); }
+
+#survey {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+#survey[hidden] { display: none; }
+#survey > * { pointer-events: auto; }
+#svTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px 0;
+}
+#svDots {
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: var(--glass);
+  font-size: 15px;
+  font-weight: 600;
+}
+#svPanel {
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 18px 14px calc(env(safe-area-inset-bottom) + 16px);
+  border-radius: 22px 22px 0 0;
+  background: rgba(8, 20, 12, 0.9);
+  backdrop-filter: blur(10px);
+}
+#svPrompt { margin: 0 0 14px; font-size: 22px; line-height: 1.3; font-weight: 600; }
+#svPrompt:empty { display: none; }
+#svOptions { display: flex; flex-direction: column; gap: 10px; }
+#svOptions.grid { display: grid; grid-template-columns: 1fr 1fr; }
+#svOptions:empty { display: none; }
+.svOption {
+  padding: 16px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 19px;
+  text-align: start;
+}
+.svOption:active { background: var(--green); color: #05230f; }
+#svActions { display: flex; align-items: center; justify-content: center; gap: 22px; margin-top: 16px; }
+#svShutter, #svMic {
+  width: 92px; height: 92px;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 40px;
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.2);
+}
+#svMic.on { background: #ff5252; animation: breathe 1s ease-in-out infinite; }
+#svShutter[hidden], #svMic[hidden], #svSkip[hidden], #svResult[hidden] { display: none; }
+#svSkip {
+  min-width: 84px;
+  padding: 14px 18px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 17px;
+}
+#svResult p { margin: 0 0 8px; font-size: 17px; line-height: 1.35; }
+#svResult .svName { font-size: 23px; font-weight: 700; color: var(--green); }
+#svResult .svWait { margin-top: 12px; color: #ffd98a; font-size: 15px; }
+
+#steps li.outlook { border-left-color: #7e57c2; background: #f4f0fb; }
+#steps li.outlook .title { font-size: 16px; font-weight: 600; }
+#steps .then { font-weight: 600; }
+#top[hidden] { display: none; }
+#steps li.outlook .icon { grid-row: span 4; }

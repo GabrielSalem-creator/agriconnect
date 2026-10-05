@@ -18,6 +18,7 @@
     <div id="hint" hidden><span>📷</span><b id="hintText" dir="auto"></b></div>
     <div id="side">
       <button id="planBtn" class="round" aria-label="Plan">📅<i id="badge" hidden></i></button>
+      <button id="surveyBtn" class="round" aria-label="Guided field survey">🧭<i id="queueBadge" class="badge" hidden></i><i id="offlineStatus" class="status" hidden></i></button>
       <a id="recordBtn" class="round" aria-label="Farm record" target="_blank" rel="noopener" hidden>💰</a>
     </div>
   </header>
@@ -37,6 +38,23 @@
       <button class="round small" aria-label="Send">➤</button>
     </form>
   </footer>
+
+  <section id="survey" hidden>
+    <div id="svTop">
+      <button id="svClose" class="round small" aria-label="Close">✕</button>
+      <span id="svDots"></span>
+    </div>
+    <div id="svPanel">
+      <p id="svPrompt" dir="auto"></p>
+      <div id="svOptions"></div>
+      <div id="svResult" hidden></div>
+      <div id="svActions">
+        <button id="svSkip"></button>
+        <button id="svShutter" aria-label="Take photo">📸</button>
+        <button id="svMic" aria-label="Record a spoken note" hidden>🎙️</button>
+      </div>
+    </div>
+  </section>
 
   <section id="start">
     <div class="logo">🌱</div>
@@ -58,5 +76,6 @@
   </aside>
 
   <script src="app.js"></script>
+  <script src="offline.js"></script>
 </body>
 </html>

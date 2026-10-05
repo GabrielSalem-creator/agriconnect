@@ -87,7 +87,7 @@ let sayChain = Promise.resolve();
 
 // Natural voice from the server; null means use the phone's own voice for this sentence.
 async function fetchVoice(text) {
-  if (!cloudVoice || !audioCtx) return null;
+  if (!cloudVoice || !audioCtx || !navigator.onLine) return null;
   try {
     const res = await fetch("/api/tts", {
       method: "POST",
@@ -230,7 +230,7 @@ function onHeard(e) {
     else interim += r[0].transcript;
   }
   const heard = (finalText + interim).trim();
-  if (!heard) return;
+  if (!heard || surveyOpen) return;
 
   const echoPossible = isSpeaking() || Date.now() - speechEndedAt < 1200;
   if (echoPossible && isEcho(heard)) return;
@@ -406,7 +406,7 @@ function clientTime() {
 
 let saving = false;     // the AI has spoken and is now writing the plan
 
-async function sendTurn(kind, text) {
+async function sendTurn(kind, text, extra) {
   while (turn && saving) await new Promise((r) => setTimeout(r, 200));
   if (turn) turn.abort();
   stopSpeaking();
@@ -415,7 +415,7 @@ async function sendTurn(kind, text) {
   turn = ctrl;
   speakBuffer = "";
   spokenRecently = "";
-  const frames = collectFrames(kind, awaitingView);
+  const frames = extra ? extra.frames : collectFrames(kind, awaitingView);
   setHint("");
   awaitingView = false;
   lastSentAt = Date.now();
@@ -428,6 +428,7 @@ async function sendTurn(kind, text) {
     location: location_,
     tz: new Date().getTimezoneOffset(),
     ...clientTime(),
+    ...extra,
   };
   wasInterrupted = false;
   readAloud = [];
@@ -436,6 +437,7 @@ async function sendTurn(kind, text) {
   ai.className = "";
   let reply = "";
   let offline = false;
+  let delivered = false;
   render();
 
   try {
@@ -469,6 +471,7 @@ async function sendTurn(kind, text) {
           feedSpeech("", true);
           saving = true;
         } else if (ev.t === "done") {
+          delivered = true;
           feedSpeech("", true);
           if (ev.plan !== undefined) setPlan(ev.plan);
           setRecord(ev.record);
@@ -487,6 +490,8 @@ async function sendTurn(kind, text) {
       offline = true;
       ai.className = "error";
       ai.textContent = "📡 ✕";
+      // No network: the phone takes over with the guided survey and its own first opinion.
+      if (kind !== "report" && !navigator.onLine) setTimeout(() => openSurvey(true), 300);
     }
   } finally {
     if (turn === ctrl) {
@@ -496,6 +501,7 @@ async function sendTurn(kind, text) {
       maybeAutoLook();
     }
   }
+  return delivered;
 }
 
 // ------------------------------------------------------------ interface
@@ -532,6 +538,7 @@ function today() {
 
 function setPlan(p) {
   plan = p;
+  store.set("plan", JSON.stringify(p));
   const due = plan ? plan.steps.filter((s) => !s.done && s.date <= today()).length : 0;
   $("badge").hidden = !due;
   $("badge").textContent = due;
@@ -599,16 +606,44 @@ function drawPlan() {
     };
     list.append(li);
   }
+
+  // What may come next: readable and audible with no network.
+  for (const o of plan.outlook || []) {
+    const li = document.createElement("li");
+    li.className = "outlook";
+    const add = (cls, text) => {
+      const el = document.createElement("div");
+      el.className = cls;
+      el.dir = "auto";
+      el.textContent = text;
+      li.append(el);
+    };
+    add("icon", "🔭");
+    add("when", o.when);
+    add("title", o.expect);
+    add("what", `👁 ${o.watch_for}`);
+    add("what then", `➜ ${o.then_do}`);
+    const ui = (typeof pack !== "undefined" && pack && pack.ui) || {};
+    li.onclick = () => {
+      stopSpeaking();
+      spokenRecently = "";
+      say(`${o.when}. ${o.expect} ${ui.if_you_see || ""} ${o.watch_for} ${ui.then_do || ""} ${o.then_do}`);
+    };
+    list.append(li);
+  }
 }
 
 async function loadState() {
   try {
     const res = await fetch(`/api/state?f=${farmerId}`);
-    if (!res.ok) return;
+    if (!res.ok) throw new Error("state");
     const state = await res.json();
     setPlan(state.plan);
     setRecord(state.record);
-  } catch {}
+  } catch {
+    // No network: use the plan saved on the phone.
+    try { setPlan(JSON.parse(store.get("plan"))); } catch {}
+  }
 }
 
 async function start() {
@@ -649,7 +684,16 @@ async function start() {
   else showTyping(true);
   setInterval(watchCamera, 700);
 
-  openingWords();
+  if (navigator.onLine) {
+    openingWords();
+    prepareOffline().then(syncCaptures);
+  } else {
+    loadPack().then(() => {
+      const due = plan ? plan.steps.filter((s) => !s.done && s.date <= today()) : [];
+      if (due.length) openingWords();
+      else openSurvey(true);
+    });
+  }
 }
 
 // What the farmer hears on opening costs no AI call: due plan steps are read out, otherwise a saved greeting.
@@ -679,6 +723,8 @@ langSelect.value = lang;
 langSelect.onchange = () => {
   lang = langSelect.value;
   cloudVoice = true;
+  pack = null;
+  if (started) loadPack();
   store.set("lang", lang);
   document.documentElement.lang = lang;
   if (started) restartListening();

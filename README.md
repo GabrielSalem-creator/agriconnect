@@ -40,3 +40,19 @@ The phone needs HTTPS for the camera and microphone, which hosted deployments pr
 - `server.js` — HTTP server, conversation loop, plan reminders (web push), voice proxy, farm record page.
 - `prompt.js` — the agronomy method and the tools the assistant uses.
 - `public/` — the phone app: camera, speech recognition, voice playback, plan sheet.
+
+## Working without network
+
+On first load the phone downloads two small plant-disease models (about 31 MB), the runtime that executes them (14 MB) and a language pack, and keeps them. With no network the app:
+
+- guides the farmer through a field survey: labelled photos (field, plant, leaf, underside, stem, roots, soil), tapped answers and a spoken note;
+- gives a first opinion from the leaf photo using the on-device models, with first-aid steps from the language pack;
+- keeps the saved plan and its outlook ("what may come next, what to watch for, what to do") readable and audible;
+- stores the survey and sends it for the full analysis as soon as the network returns.
+
+The on-device models are open models from Hugging Face trained mostly on laboratory photos. They are a first opinion only and are often unsure on real field photos; the full analysis corrects them.
+
+Language packs for English, Arabic, French, Swahili, Hindi, Spanish and Portuguese are in `packs/`. Other languages are generated on first request, which takes a minute or two.
+
+- `public/offline.js` — on-device models, guided survey, saved surveys and sync.
+- `offline-pack.js` — source text of the survey and the list of conditions.

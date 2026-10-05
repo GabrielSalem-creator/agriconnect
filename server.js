@@ -8,6 +8,7 @@ import { randomBytes, createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import webpush from "web-push";
 import { SYSTEM_PROMPT, TOOLS } from "./prompt.js";
+import { PACK_VERSION, UI, packPrompt, validPack } from "./offline-pack.js";
 
 // Local development reads keys from .env; a hosting platform provides them as environment variables.
 try {
@@ -47,6 +48,7 @@ const TTS_WIDE = new Set(
 );
 
 const MAX_FRAMES = 2;
+const MAX_REPORT_FRAMES = 8;
 const MAX_FRAME_B64 = 600_000;
 const VISIT_GAP_MS = 3 * 60 * 60 * 1000;
 const VISIT_MAX_IMAGES = 40;
@@ -252,7 +254,7 @@ async function fetchWeather({ lat, lon }) {
   try {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-      `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&past_days=7&forecast_days=4&timezone=auto`;
+      `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&past_days=7&forecast_days=16&timezone=auto`;
     const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return "";
     const w = await res.json();
@@ -260,7 +262,7 @@ async function fetchWeather({ lat, lon }) {
       (t, i) =>
         `${t}: ${w.daily.temperature_2m_min[i]}–${w.daily.temperature_2m_max[i]}°C, rain ${w.daily.precipitation_sum[i]} mm`,
     );
-    return `Altitude about ${Math.round(w.elevation)} m. Daily weather, past week then forecast:\n${days.join("\n")}`;
+    return `Altitude about ${Math.round(w.elevation)} m. Daily weather, past week then the forecast for the next two weeks:\n${days.join("\n")}`;
   } catch {
     return "";
   }
@@ -272,7 +274,12 @@ function planForModel(plan, today) {
     const status = s.done ? "done" : s.date < today ? "OVERDUE" : s.date === today ? "DUE TODAY" : "upcoming";
     return `- ${s.id} [${status}] ${s.date} ${s.time}${s.check_with_camera ? " (camera check-in)" : ""}: ${s.instruction}${s.expect ? ` | expected if diagnosis is right: ${s.expect}` : ""}`;
   });
-  return `Diagnosis: ${plan.diagnosis} (confidence ${plan.confidence}). Plan saved on ${plan.createdAt}.\n${steps.join("\n")}`;
+  const outlook = (plan.outlook || []).map(
+    (o) => `- around ${o.date}: expect ${o.expect_en} | watch for: ${o.watch_for} | then: ${o.then_do}`,
+  );
+  return `Diagnosis: ${plan.diagnosis} (confidence ${plan.confidence}). Plan saved on ${plan.createdAt}.\n${steps.join("\n")}${
+    outlook.length ? `\nOutlook you gave for the weeks ahead:\n${outlook.join("\n")}` : ""
+  }`;
 }
 
 // The last few spoken exchanges of the previous visit, text only.
@@ -351,6 +358,15 @@ function runTool(farmer, name, input, today, out) {
         summary: clean(input.summary, 400),
         createdAt: today,
         steps,
+        // What is likely to come later in the season, and what to do if it does. Usable with no network.
+        outlook: (Array.isArray(input.outlook) ? input.outlook : []).slice(0, 12).map((o) => ({
+          date: addDays(today, Math.max(0, Math.min(365, Math.trunc(Number(o.day)) || 0))),
+          when: clean(o.when, 120),
+          expect: clean(o.expect, 400),
+          expect_en: clean(o.expect_en, 300),
+          watch_for: clean(o.watch_for, 300),
+          then_do: clean(o.then_do, 500),
+        })),
       };
       out.planChanged = true;
       return `Plan saved and added to the farmer's reminders. Step ids: ${steps.map((s) => `${s.id} (${s.date} ${s.time})`).join(", ")}.`;
@@ -386,6 +402,29 @@ function runTool(farmer, name, input, today, out) {
 }
 
 // ---------------------------------------------------------------- the turn
+
+// A survey the farmer collected with the app's step-by-step guide, possibly hours ago with no network.
+function surveyText(survey) {
+  const sv = survey && typeof survey === "object" ? survey : {};
+  const answers = Object.entries(sv.answers && typeof sv.answers === "object" ? sv.answers : {})
+    .slice(0, 12)
+    .map(([q, a]) => `- ${clean(q, 60)}: ${clean(a, 120)}`);
+  const opinion = (Array.isArray(sv.opinion) ? sv.opinion : [])
+    .slice(0, 3)
+    .map((o) => `${clean(o.id, 40)} ${Math.round((Number(o.prob) || 0) * 100)}%`);
+  return [
+    `[Field survey the farmer collected with the app's guided survey at ${clean(sv.capturedAt, 60) || "an unknown time"}${sv.offline ? ", while there was no network" : ""}. The labelled photos above belong to it.]`,
+    `Crop chosen by the farmer: ${clean(sv.crop, 40) || "not given"}`,
+    answers.length ? `Answers:\n${answers.join("\n")}` : "",
+    sv.note ? `Farmer's spoken note: "${clean(sv.note, 1500)}"` : "",
+    opinion.length
+      ? `First opinion of the small model on the phone, already told to the farmer: ${opinion.join(", ")}. It was trained mostly on clean laboratory photos and is often wrong in the field; treat it as a weak hint and correct it plainly if you disagree.`
+      : "The model on the phone could not give an opinion.",
+    "[Analyse all of it now. Tell the farmer what the problem is and the first thing to do, then save a full plan with an outlook, the farm record and notes. If something essential is missing, say what to show you next.]",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 // Tools whose arguments take many seconds to write.
 const SLOW_TOOLS = new Set(["save_plan", "save_farm_record"]);
@@ -441,7 +480,7 @@ function startStream(messages, textOnly) {
 
 async function runTurn(id, body, res, send) {
   const farmer = await loadFarmer(id);
-  const kind = ["say", "open", "look"].includes(body.kind) ? body.kind : "say";
+  const kind = ["say", "open", "look", "report"].includes(body.kind) ? body.kind : "say";
   const text = clean(body.text, 2000);
   const today = DATE_RE.test(body.localDate) ? body.localDate : serverDate();
 
@@ -465,12 +504,14 @@ async function runTurn(id, body, res, send) {
 
   const frames = (Array.isArray(body.frames) ? body.frames : [])
     .filter((f) => typeof f === "string" && f.length > 100 && f.length < MAX_FRAME_B64 && /^[A-Za-z0-9+/=]+$/.test(f))
-    .slice(-MAX_FRAMES);
+    .slice(kind === "report" ? -MAX_REPORT_FRAMES : -MAX_FRAMES);
+  const frameLabels = Array.isArray(body.frameLabels) ? body.frameLabels.map((l) => clean(l, 60)) : [];
 
   const said = [farmer.carry, text].filter(Boolean).join(" ");
   const lines = [`[Local time: ${clean(body.clientTime, 80) || today}]`];
   if (body.interrupted) lines.push("[The farmer interrupted you; they did not hear the end of your last reply.]");
-  if (frames.length) lines.push(`[${frames.length} camera frame(s) attached, oldest first; the last is the live view.]`);
+  if (kind === "report") lines.push(surveyText(body.survey));
+  else if (frames.length) lines.push(`[${frames.length} camera frame(s) attached, oldest first; the last is the live view.]`);
   else if (kind === "say") lines.push("[No new frame: the camera view has not changed since the last one you saw.]");
   if (kind === "open") {
     lines.push(
@@ -487,9 +528,10 @@ async function runTurn(id, body, res, send) {
 
   const content = [...visit.pending];
   if (!visit.messages.length) content.push({ type: "text", text: visit.header });
-  for (const data of frames) {
+  frames.forEach((data, i) => {
+    if (kind === "report" && frameLabels[i]) content.push({ type: "text", text: `Photo: ${frameLabels[i]}` });
     content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
-  }
+  });
   content.push({ type: "text", text: lines.join("\n") });
   const userMsg = { role: "user", content };
 
@@ -793,6 +835,69 @@ async function handleGreeting(res, lang) {
   json(res, 200, { text: greetings[lang] });
 }
 
+// The offline pack for one language: bundled with the code if present, otherwise written once and cached.
+const packs = new Map();
+async function handlePack(res, lang) {
+  lang = /^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$/.test(lang) ? lang : "en-US";
+  if (!packs.has(lang)) {
+    packs.set(
+      lang,
+      (async () => {
+        const name = `${lang}.json`;
+        for (const file of [path.join(here, "packs", name), path.join(DATA, "_packs", name)]) {
+          const saved = await fs.readFile(file, "utf8").then(JSON.parse).catch(() => null);
+          if (saved?.version === PACK_VERSION && validPack(saved)) return saved;
+        }
+        // Long structured output occasionally comes back incomplete; try a few times before giving up.
+        let pack = null;
+        for (let attempt = 0; attempt < 3 && !pack; attempt++) {
+          const msg = await anthropic()
+            .messages.stream({
+              model: MODEL,
+              max_tokens: 32000,
+              output_config: { effort: "low" },
+              messages: [{ role: "user", content: packPrompt(lang) }],
+            })
+            .finalMessage();
+          const text = msg.content.find((b) => b.type === "text")?.text || "";
+          try {
+            const parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+            if (validPack(parsed)) pack = parsed;
+          } catch {}
+        }
+        if (!pack) throw new Error("incomplete offline pack");
+        if (lang.toLowerCase().startsWith("en")) pack.ui = UI;
+        pack.version = PACK_VERSION;
+        pack.lang = lang;
+        await fs.mkdir(path.join(DATA, "_packs"), { recursive: true });
+        await fs.writeFile(path.join(DATA, "_packs", name), JSON.stringify(pack));
+        return pack;
+      })(),
+    );
+  }
+  try {
+    json(res, 200, await packs.get(lang));
+  } catch (err) {
+    packs.delete(lang);
+    console.error("offline pack failed:", err.message);
+    // English words are better than none.
+    json(res, 503, { version: 0, lang: "en-US", ui: UI, conditions: {} });
+  }
+}
+
+// The in-browser model runtime, served from the installed package so the phone can keep it for offline use.
+const ORT_DIR = path.join(here, "node_modules", "onnxruntime-web", "dist");
+const ORT_FILES = new Set(["ort.wasm.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]);
+async function serveRuntime(name, res) {
+  if (!ORT_FILES.has(name)) return json(res, 404, { error: "not found" });
+  const data = await fs.readFile(path.join(ORT_DIR, name));
+  res.writeHead(200, {
+    "Content-Type": name.endsWith(".wasm") ? "application/wasm" : "text/javascript; charset=utf-8",
+    "Cache-Control": "public, max-age=604800",
+  });
+  res.end(data);
+}
+
 // Speech recognition for phones whose browser has none built in.
 async function handleStt(req, res) {
   if (!ELEVEN_KEY) return json(res, 501, { error: "no cloud speech recognition" });
@@ -883,6 +988,8 @@ http
       if (req.method === "GET" && url.pathname === "/api/greeting") {
         return await handleGreeting(res, url.searchParams.get("lang") || "").catch(() => json(res, 200, { text: "" }));
       }
+      if (req.method === "GET" && url.pathname === "/api/pack") return await handlePack(res, url.searchParams.get("lang") || "");
+      if (req.method === "GET" && url.pathname.startsWith("/vendor/ort/")) return await serveRuntime(url.pathname.slice(12), res);
       if (req.method === "GET" && url.pathname === "/api/push-key") return json(res, 200, { key: vapidPublicKey });
       if (req.method === "GET" && url.pathname.startsWith("/r/")) {
         const token = url.pathname.slice(3);
