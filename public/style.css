@@ -329,3 +329,24 @@ a.round[hidden] { display: none; }
 #steps .then { font-weight: 600; }
 #top[hidden] { display: none; }
 #steps li.outlook .icon { grid-row: span 4; }
+
+/* ---------- offline assistant download ---------- */
+#llmCard {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 80px);
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 96px);
+  padding: 8px 10px 8px 14px;
+  border-radius: 22px;
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  font-size: 15px;
+  font-weight: 600;
+}
+#llmCard[hidden], #llmBar[hidden], #llmGet[hidden] { display: none; }
+#llmBar { width: 110px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+#llmFill { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.3s; }
+#llmGet { width: 40px; height: 40px; border-radius: 50%; background: var(--green); font-size: 18px; }

@@ -417,6 +417,9 @@ function surveyText(survey) {
     `Crop chosen by the farmer: ${clean(sv.crop, 40) || "not given"}`,
     answers.length ? `Answers:\n${answers.join("\n")}` : "",
     sv.note ? `Farmer's spoken note: "${clean(sv.note, 1500)}"` : "",
+    sv.phoneSaid
+      ? `With no network, the small language model on the phone already answered the farmer: "${clean(sv.phoneSaid, 800)}". It is weak; confirm or correct it plainly.`
+      : "",
     opinion.length
       ? `First opinion of the small model on the phone, already told to the farmer: ${opinion.join(", ")}. It was trained mostly on clean laboratory photos and is often wrong in the field; treat it as a weak hint and correct it plainly if you disagree.`
       : "The model on the phone could not give an opinion.",

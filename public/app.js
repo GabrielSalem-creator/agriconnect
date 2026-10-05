@@ -202,7 +202,7 @@ function startListening() {
     if (e.error === "not-allowed") {
       recWanted = false;
       showTyping(true);
-    } else if (e.error === "language-not-supported" || e.error === "service-not-allowed") {
+    } else if (e.error === "language-not-supported" || e.error === "service-not-allowed" || (e.error === "network" && !navigator.onLine)) {
       // This browser cannot recognise the language: record and let the server transcribe.
       recWanted = false;
       tapToTalk = true;
@@ -276,6 +276,7 @@ async function toggleRecording() {
     recorder = null;
     render();
     const blob = new Blob(chunks, { type: r.mimeType });
+    if (!navigator.onLine) return offlineAsk({ audio: blob });
     try {
       const res = await fetch("/api/stt", { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob });
       const { text } = await res.json();
@@ -491,7 +492,11 @@ async function sendTurn(kind, text, extra) {
       ai.className = "error";
       ai.textContent = "📡 ✕";
       // No network: the phone takes over with the guided survey and its own first opinion.
-      if (kind !== "report" && !navigator.onLine) setTimeout(() => openSurvey(true), 300);
+      if (kind !== "report" && !navigator.onLine) {
+        // The phone takes over: tap the orb to speak, or follow the guided survey.
+        tapToTalk = true;
+        setTimeout(() => (text ? offlineAsk({ text }) : openSurvey(true)), 300);
+      }
     }
   } finally {
     if (turn === ctrl) {
@@ -510,6 +515,7 @@ function render(offline) {
   const orb = $("orb");
   orb.className = offline === true ? "offline"
     : recorder ? "hearing"
+    : typeof offlineBusy !== "undefined" && offlineBusy ? "thinking"
     : isSpeaking() ? "speaking"
     : turn ? "thinking"
     : Date.now() < hearingUntil ? "hearing"
@@ -686,10 +692,14 @@ async function start() {
 
   if (navigator.onLine) {
     openingWords();
-    prepareOffline().then(syncCaptures);
+    prepareOffline().then(syncCaptures).then(offerLLM);
   } else {
     loadPack().then(() => {
       const due = plan ? plan.steps.filter((s) => !s.done && s.date <= today()) : [];
+      // The phone takes the conversation: tap the orb, speak, tap again.
+      tapToTalk = true;
+      recWanted = false;
+      if (speaksEnglish() && llmDownloaded()) loadLLM();
       if (due.length) openingWords();
       else openSurvey(true);
     });
@@ -761,6 +771,7 @@ $("typeForm").onsubmit = (e) => {
   $("typeInput").value = "";
   if (!text) return;
   $("you").textContent = text;
+  if (!navigator.onLine) return offlineAsk({ text });
   sendTurn("say", text);
 };
 

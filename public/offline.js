@@ -257,6 +257,7 @@ const PHOTO_LABEL = {
   field: "the whole field", plant: "one whole sick plant", leaf: "a sick leaf, top side, close up",
   under: "the underside of that leaf", stem: "the base of the stem at soil level",
   roots: "the roots of a pulled plant", soil: "soil from a hand-deep hole next to a sick plant",
+  live: "what the camera saw while the farmer was speaking",
 };
 const QUESTIONS = {
   q_when: ["when it started", ["a few days ago", "about a week ago", "more than two weeks ago"]],
@@ -343,6 +344,7 @@ function nextStep() {
     for (const [crop, icon] of CROPS) {
       addOption(`${icon} ${ui[`crop_${crop}`]}`, () => {
         sv.crop = crop;
+        store.set("crop", crop);
         nextStep();
       });
     }
@@ -417,7 +419,11 @@ async function toggleSurveyNote() {
 async function finishSurvey() {
   const ui = pack.ui;
   $("svPrompt").textContent = "⏳";
-  const opinion = (await (sv.opinionJob || sv.plantJob || null)) || null;
+  let opinion = (await (sv.opinionJob || sv.plantJob || null)) || null;
+  if (sv.voice && llmDownloaded() && (await loadLLM())) {
+    sv.note = await hearOffline(sv.voice).catch(() => "");
+    if (sv.note) opinion = await combineOpinion(opinion, sv.note, sv.crop);
+  }
   const top = opinion && opinion[0];
   const known = top && pack.conditions[top.id];
   const box = $("svResult");
@@ -464,7 +470,8 @@ async function finishSurvey() {
     crop: sv.crop,
     photos: sv.photos,
     answers: sv.answers,
-    voice: sv.voice,
+    voice: sv.note ? null : sv.voice,
+    note: sv.note || "",
     opinion,
   }).catch(() => {});
   showQueue();
@@ -504,7 +511,7 @@ async function syncCaptures() {
       const ok = await sendTurn("report", "", {
         frames: c.photos.map((p) => p.b64),
         frameLabels: c.photos.map((p) => PHOTO_LABEL[p.kind]),
-        survey: { capturedAt: c.capturedAt, offline: c.offline, crop: c.crop, answers, note: c.note || "", opinion: c.opinion || [] },
+        survey: { capturedAt: c.capturedAt, offline: c.offline, crop: c.crop, answers, note: c.note || "", opinion: c.opinion || [], phoneSaid: c.phoneSaid || "" },
       });
       if (!ok) break;
       await captures.remove(c.id);

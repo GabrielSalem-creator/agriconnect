@@ -54,5 +54,14 @@ The on-device models are open models from Hugging Face trained mostly on laborat
 
 Language packs for English, Arabic, French, Swahili, Hindi, Spanish and Portuguese are in `packs/`. Other languages are generated on first request, which takes a minute or two.
 
+### The offline assistant
+
+For English speakers the phone also downloads a speech model and a text-matching model (about 100 MB, with a progress bar). With no network the farmer taps the orb and speaks; the phone turns the speech into text, compares the words with known symptom descriptions, combines that with the photo judgement, and speaks advice prepared in advance.
+
+In other languages the phone judges the photo, keeps the voice recording, and has it transcribed with the full analysis when the network returns. The on-device speech model was tested in Arabic and Swahili and was not usable.
+
+Small general-purpose language models (a 500M vision-language model and a 1B text model) were tested for this role and rejected: they misread diseased leaves, could not match symptoms, and one invented a pesticide name.
+
+- `public/llm.js` — on-device speech understanding, symptom matching and the offline conversation.
 - `public/offline.js` — on-device models, guided survey, saved surveys and sync.
 - `offline-pack.js` — source text of the survey and the list of conditions.
